@@ -12,6 +12,10 @@ union fixed
 	};
 	s32 RawValue;
 
+	fixed() : RawValue(0) {}
+
+	fixed(int Int) : FractionalPart(0), WholePart(Int) {}
+
 	inline void operator+=(fixed Other)
 	{
 		RawValue += Other.RawValue;
@@ -62,6 +66,11 @@ inline bool operator>(fixed A, fixed B)
 	return A.RawValue > B.RawValue;
 }
 
+inline bool operator>=(fixed A, fixed B)
+{
+	return A.RawValue >= B.RawValue;
+}
+
 inline bool operator>(fixed A, int Int)
 {
 	if (A.WholePart > Int)
@@ -91,6 +100,21 @@ inline bool operator<(fixed A, int Int)
 		return A.FractionalPart == 0;
 	}
 	return false;
+}
+
+inline fixed FMin(fixed A, fixed B)
+{
+	return A < B ? A : B;
+}
+
+inline fixed FMax(fixed A, fixed B)
+{
+	return A > B ? A : B;
+}
+
+inline fixed FClamp(fixed Value, fixed Min, fixed Max)
+{
+	return FMin(FMax(Value, Min), Max);
 }
 
 

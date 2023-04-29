@@ -59,7 +59,7 @@ void OnVBlank()
 }
 
 static const bg_map ForestMap = { 
-	500, 100,
+	500, 256,
 	0, 0
 };
 
@@ -75,8 +75,12 @@ int main(void)
 	PlayerStartPos.Y = 90;
 	
 	Player.WorldPos = {};
+	Player.WorldPos.X = Player.Width / 2;
+	Player.WorldPos.Y = 0;
+
 	Player.Width = 64;
-	Player.Height = 32;
+	Player.Height = 64;
+
 
 	LoadBackground();
 
@@ -93,15 +97,15 @@ int main(void)
 		{
 			Player.WorldPos.X = 0;
 		}
-		if (Player.WorldPos.X > ForestMap.Width - (Player.Width / 2))
+		if (Player.WorldPos.X > ForestMap.Width)
 		{
-			Player.WorldPos.X = ForestMap.Width - (Player.Width / 2);
+			Player.WorldPos.X = ForestMap.Width;
 		}
 
 		Player.WorldPos.Y += key_tri_vert();
-		if (Player.WorldPos.Y > ForestMap.Height - Player.Height)
+		if (Player.WorldPos.Y > 104)
 		{
-			Player.WorldPos.Y = ForestMap.Height - Player.Height;
+			Player.WorldPos.Y = 104;
 		}
 		if (Player.WorldPos.Y < 0)
 		{
@@ -112,36 +116,31 @@ int main(void)
 		
 		v2 Cutoff = {};
 		Cutoff.X = ForestMap.Width - SCREEN_WIDTH;
-		Cutoff.Y = ForestMap.Height - Player.Height;
+		Cutoff.Y = ForestMap.Height - SCREEN_HEIGHT;
 		
-		b32 ShouldCameraMoveX = true;
-		b32 ShouldCameraMoveY = true;
-		if (Player.WorldPos.X > Cutoff.X)
+		if (Player.WorldPos.X >= Cutoff.X)
 		{
 			// If there's less than a screen's width left of the map, move the player across the screen
-			PlayerScreenPos.X = Player.WorldPos.X - Cutoff.X;
-			ShouldCameraMoveX = false;
+			PlayerScreenPos.X += Player.WorldPos.X - Cutoff.X;
 		}
-		if (Player.WorldPos.Y > Cutoff.Y)
+		else
 		{
-			PlayerScreenPos.Y = Player.WorldPos.Y - Cutoff.Y;
-			ShouldCameraMoveY = false;
+			// Otherwise, just move the camera to follow the player
+			CameraPos.X = Player.WorldPos.X - Player.Width / 2;
 		}
 
-		if (ShouldCameraMoveX)
+		if (Player.WorldPos.Y >= Cutoff.Y)
 		{
-			// Otherwise, just move the camera
-			CameraPos.X = Player.WorldPos.X;
+			PlayerScreenPos.Y += Player.WorldPos.Y - Cutoff.Y;
 		}
-		if (ShouldCameraMoveY)
+		else
 		{
 			CameraPos.Y = Player.WorldPos.Y;
 		}
 
-
 		REG_BG0HOFS = CameraPos.X.WholePart;
 		REG_BG0VOFS = CameraPos.Y.WholePart;
-
+		
 		SetObjPos(Player.Sprite, PlayerScreenPos);
 
 		g_CanDraw = true;
