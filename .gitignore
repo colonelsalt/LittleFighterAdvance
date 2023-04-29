@@ -6,3 +6,4 @@ build/
 *.elf
 .vscode
 *.10x
+working_memory.txt
