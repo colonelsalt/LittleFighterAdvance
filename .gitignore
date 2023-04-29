@@ -1,0 +1,8 @@
+build/
+*.log
+*.sav
+*.gba
+*.lnk
+*.elf
+.vscode
+*.10x
