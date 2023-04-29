@@ -7,8 +7,8 @@ union fixed
 {
 	struct
 	{
-		int WholePart : 24;
 		u8 FractionalPart;
+		int WholePart : 24;
 	};
 	s32 RawValue;
 
@@ -20,6 +20,12 @@ union fixed
 	inline void operator+=(int Other)
 	{
 		WholePart += Other;
+	}
+
+	inline void operator=(int Other)
+	{
+		WholePart = Other;
+		FractionalPart = 0;
 	}
 };
 
@@ -49,6 +55,42 @@ inline fixed operator-(fixed A, int Int)
 	fixed Result = A;
 	Result.WholePart -= Int;
 	return Result;
+}
+
+inline bool operator>(fixed A, fixed B)
+{
+	return A.RawValue > B.RawValue;
+}
+
+inline bool operator>(fixed A, int Int)
+{
+	if (A.WholePart > Int)
+	{
+		return true;
+	}
+	else if (A.WholePart == Int)
+	{
+		return A.FractionalPart > 0;
+	}
+	return false;
+}
+
+inline bool operator<(fixed A, fixed B)
+{
+	return A.RawValue < B.RawValue;
+}
+
+inline bool operator<(fixed A, int Int)
+{
+	if (A.WholePart < Int)
+	{
+		return true;
+	}
+	else if (A.WholePart == Int)
+	{
+		return A.FractionalPart == 0;
+	}
+	return false;
 }
 
 

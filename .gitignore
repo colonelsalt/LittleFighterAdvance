@@ -7,3 +7,4 @@ build/
 .vscode
 *.10x
 working_memory.txt
+temp
