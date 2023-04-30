@@ -56,7 +56,7 @@ void OnVBlank()
 		g_CanDraw = false;
 
 		u32 CurrentFrame = Player.PlayingAnimation->Frames[Player.AnimationFrameIndex];
-		memcpy32(&tile_mem[4][0], freeze_0Tiles + CurrentFrame * 64 * 32, 8 * 8 * sizeof(TILE));
+		memcpy32(&tile_mem[4][0], freeze_0Tiles + CurrentFrame * 64 * 32, PLAYER_FRAME_SIZE / 4);
 		oam_copy(oam_mem, g_ObjBuffer, 1);
 	}
 }
@@ -91,7 +91,32 @@ static const animation PlayerRun =
 	.ShouldLoop = true
 };
 
-void SetAnimation(entity* Entity, const animation* Animation)
+static const animation PlayerStartJump =
+{
+	.Frames = (u32[]){60, 61},
+	.Length = 2,
+	.FrameDelay = 6,
+	.ShouldLoop = false
+
+};
+
+static const animation PlayerJumpLoop = 
+{
+	.Frames = (u32[]){62},
+	.Length = 1,
+	.FrameDelay = 1,
+	.ShouldLoop = true
+};
+
+static const animation PlayerJumpFastLoop = 
+{
+	.Frames = (u32[]){63},
+	.Length = 1,
+	.FrameDelay = 1,
+	.ShouldLoop = true
+};
+
+inline void SetAnimation(entity* Entity, const animation* Animation)
 {
 	if (Entity->PlayingAnimation != Animation)
 	{
@@ -101,7 +126,18 @@ void SetAnimation(entity* Entity, const animation* Animation)
 	}
 }
 
-void AnimateEntity(entity* Entity)
+inline b32 HasAnimationEnded(entity* Entity)
+{
+	const animation* Animation = Entity->PlayingAnimation;
+	if (!Animation->ShouldLoop)
+	{
+		return Entity->AnimationFrameIndex >= Animation->Length - 1;
+	}
+	return false;
+}
+
+
+static void AnimateEntity(entity* Entity)
 {
 	const animation* Animation = Entity->PlayingAnimation;
 	Entity->AnimationTimer--;
@@ -157,6 +193,28 @@ int main(void)
 	{
 		key_poll();
 
+		if (Player.StartedJump)
+		{
+			Player.JumpTimer--;
+			if (Player.JumpTimer <= 0)
+			{
+				Player.StartedJump = false;
+				Player.VelocityZ = JUMP_SPEED;
+				Player.IsAirborne = true;
+			}
+		}
+
+		if (Player.IsAirborne)
+		{
+			Player.VelocityZ -= GRAVITY;
+			Player.ZPos += Player.VelocityZ;
+			if (Player.ZPos < 0)
+			{
+				Player.ZPos = 0;
+				Player.IsAirborne = false;
+			}
+		}
+
 		if (key_hit(KEY_LEFT))
 		{
 			SetHFlip(Player.Sprite, true);
@@ -202,6 +260,13 @@ int main(void)
 			Player.FramesSinceLastMovement++;
 		}
 
+		if (key_hit(KEY_A) && !Player.IsAirborne)
+		{
+			Player.StartedJump = true;
+			Player.JumpTimer = JUMP_DELAY;
+		}
+
+
 		if (!Player.IsRunning)
 		{
 			Player.Velocity.X = WALK_SPEED * key_tri_horz();
@@ -209,7 +274,10 @@ int main(void)
 		Player.Velocity.Y = WALK_SPEED * key_tri_vert();
 
 
-		Player.WorldPos += Player.Velocity;
+		if (!Player.StartedJump)
+		{
+			Player.WorldPos += Player.Velocity;
+		}
 		
 		if (Player.WorldPos.X < 0)
 		{
@@ -254,22 +322,46 @@ int main(void)
 		{
 			CameraPos.Y = Player.WorldPos.Y;
 		}
+		PlayerScreenPos.Y -= Player.ZPos;
 
 		REG_BG0HOFS = CameraPos.X.WholePart;
 		REG_BG0VOFS = CameraPos.Y.WholePart;
 
-		if (Player.IsRunning)
+		if (Player.StartedJump)
 		{
-			SetAnimation(&Player, &PlayerRun);
+			SetAnimation(&Player, &PlayerStartJump);
 		}
-		else if (SqMagnitude(Player.Velocity) > 0)
+		else if (Player.IsAirborne)
 		{
-			SetAnimation(&Player, &PlayerWalk);
+			if (Player.Velocity.X <= -RUN_SPEED)
+			{
+				SetAnimation(&Player, &PlayerJumpFastLoop);
+			}
+			else if (Player.Velocity.X >= RUN_SPEED)
+			{
+				SetAnimation(&Player, &PlayerJumpFastLoop);
+			}
+			else
+			{
+				SetAnimation(&Player, &PlayerJumpLoop);
+			}
 		}
 		else
 		{
-			SetAnimation(&Player, &PlayerIdle);
+			if (Player.IsRunning)
+			{
+				SetAnimation(&Player, &PlayerRun);
+			}
+			else if (SqMagnitude(Player.Velocity) > 0)
+			{
+				SetAnimation(&Player, &PlayerWalk);
+			}
+			else
+			{
+				SetAnimation(&Player, &PlayerIdle);
+			}
 		}
+
 
 		AnimateEntity(&Player);
 		SetObjPos(Player.Sprite, PlayerScreenPos);

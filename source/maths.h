@@ -16,9 +16,16 @@ union fixed
 
 	fixed(int Int) : FractionalPart(0), WholePart(Int) {}
 
+	fixed(int Whole, int Fraction) : FractionalPart(Fraction), WholePart(Whole) {}
+
 	inline void operator+=(fixed Other)
 	{
 		RawValue += Other.RawValue;
+	}
+
+	inline void operator-=(fixed Other)
+	{
+		RawValue -= Other.RawValue;
 	}
 
 	inline void operator+=(int Other)
@@ -32,6 +39,8 @@ union fixed
 		FractionalPart = 0;
 	}
 };
+
+static const fixed F_HALF = fixed(0, 1 << 7);
 
 inline fixed operator+(fixed A, fixed B)
 {
