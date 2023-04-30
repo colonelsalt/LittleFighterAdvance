@@ -56,7 +56,7 @@ void OnVBlank()
 		g_CanDraw = false;
 
 		u32 CurrentFrame = Player.PlayingAnimation->Frames[Player.AnimationFrameIndex];
-		memcpy32(&tile_mem[4][0], freeze_0Tiles + CurrentFrame * 64 * 32, freeze_0TilesLen / 4);
+		memcpy32(&tile_mem[4][0], freeze_0Tiles + CurrentFrame * 64 * 32, 8 * 8 * sizeof(TILE));
 		oam_copy(oam_mem, g_ObjBuffer, 1);
 	}
 }
@@ -80,6 +80,14 @@ static const animation PlayerWalk =
 	.Frames = (u32[]){4, 5, 6, 7},
 	.Length = 4,
 	.FrameDelay = 7,
+	.ShouldLoop = true
+};
+
+static const animation PlayerRun =
+{
+	.Frames = (u32[]){20, 21, 22},
+	.Length = 3,
+	.FrameDelay = 5,
 	.ShouldLoop = true
 };
 
@@ -149,8 +157,57 @@ int main(void)
 	{
 		key_poll();
 
-		Player.Velocity.X = key_tri_horz() * WALK_SPEED;
-		Player.Velocity.Y = key_tri_vert() * WALK_SPEED;
+		if (key_hit(KEY_LEFT))
+		{
+			SetHFlip(Player.Sprite, true);
+
+			if (Player.LastInputX < 0 && Player.FramesSinceLastMovement <= DOUBLE_TAP_INTERVAL)
+			{
+				Player.IsRunning = true;
+				Player.Velocity.X = -RUN_SPEED;
+			}
+			else
+			{
+				if (Player.Velocity.X >= RUN_SPEED)
+				{
+					Player.IsRunning = false;
+					Player.Velocity.X = 0;
+				}
+			}
+			Player.LastInputX = -1;
+			Player.FramesSinceLastMovement = 0;
+		}
+		else if (key_hit(KEY_RIGHT))
+		{
+			SetHFlip(Player.Sprite, false);	
+
+			if (Player.LastInputX > 0 && Player.FramesSinceLastMovement <= DOUBLE_TAP_INTERVAL)
+			{
+				Player.IsRunning = true;
+				Player.Velocity.X = RUN_SPEED;
+			}
+			else
+			{
+				if (Player.Velocity.X <= -RUN_SPEED)
+				{
+					Player.IsRunning = false;
+					Player.Velocity.X = 0;
+				}
+			}
+			Player.LastInputX = 1;
+			Player.FramesSinceLastMovement = 0;
+		}
+		else
+		{
+			Player.FramesSinceLastMovement++;
+		}
+
+		if (!Player.IsRunning)
+		{
+			Player.Velocity.X = WALK_SPEED * key_tri_horz();
+		}
+		Player.Velocity.Y = WALK_SPEED * key_tri_vert();
+
 
 		Player.WorldPos += Player.Velocity;
 		
@@ -200,16 +257,12 @@ int main(void)
 
 		REG_BG0HOFS = CameraPos.X.WholePart;
 		REG_BG0VOFS = CameraPos.Y.WholePart;
-		
-		if (key_hit(KEY_LEFT))
+
+		if (Player.IsRunning)
 		{
-			SetHFlip(Player.Sprite, true);
+			SetAnimation(&Player, &PlayerRun);
 		}
-		else if (key_hit(KEY_RIGHT))
-		{
-			SetHFlip(Player.Sprite, false);	
-		}
-		if (SqMagnitude(Player.Velocity) > 0)
+		else if (SqMagnitude(Player.Velocity) > 0)
 		{
 			SetAnimation(&Player, &PlayerWalk);
 		}
@@ -217,7 +270,6 @@ int main(void)
 		{
 			SetAnimation(&Player, &PlayerIdle);
 		}
-
 
 		AnimateEntity(&Player);
 		SetObjPos(Player.Sprite, PlayerScreenPos);

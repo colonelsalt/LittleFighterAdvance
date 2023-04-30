@@ -92,6 +92,11 @@ inline bool operator>=(fixed A, fixed B)
 	return A.RawValue >= B.RawValue;
 }
 
+inline bool operator<=(fixed A, fixed B)
+{
+	return A.RawValue <= B.RawValue;
+}
+
 inline bool operator>(fixed A, int Int)
 {
 	if (A.WholePart > Int)
@@ -103,6 +108,13 @@ inline bool operator>(fixed A, int Int)
 		return A.FractionalPart > 0;
 	}
 	return false;
+}
+
+inline fixed operator-(fixed A)
+{
+	fixed Result = A;
+	Result.WholePart *= -1;
+	return Result;
 }
 
 inline bool operator<(fixed A, fixed B)

@@ -8,7 +8,10 @@ struct animation
 	b32 ShouldLoop;
 };
 
-const static fixed WALK_SPEED = 1;
+static const fixed WALK_SPEED = 1;
+static const fixed RUN_SPEED = 3;
+
+static const u32 DOUBLE_TAP_INTERVAL = 20; // Max num. frames in between presses to count as a double-tap
 
 struct entity
 {
@@ -17,9 +20,10 @@ struct entity
 	u16 Width;
 	u16 Height;
 
+	b32 IsRunning;
 	v2 Velocity;
-	v2 LastMovementInput;
-
+	s32 LastInputX;
+	u32 FramesSinceLastMovement;
 
 	u32 AnimationTimer;
 	u32 AnimationFrameIndex;
