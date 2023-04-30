@@ -47,6 +47,13 @@ inline fixed operator-(fixed A, fixed B)
 	return Result;
 }
 
+inline fixed operator*(fixed A, fixed B)
+{
+	fixed Result;
+	Result.RawValue = A.RawValue * B.RawValue;
+	return Result;
+}
+
 inline fixed operator+(fixed A, int Int)
 {
 	fixed Result = A;
@@ -58,6 +65,20 @@ inline fixed operator-(fixed A, int Int)
 {
 	fixed Result = A;
 	Result.WholePart -= Int;
+	return Result;
+}
+
+inline fixed operator*(fixed A, int Int)
+{
+	fixed Result = A;
+	Result.WholePart *= Int;
+	return Result;
+}
+
+inline fixed operator*(int Int, const fixed B)
+{
+	fixed Result = B;
+	Result.WholePart *= Int;
 	return Result;
 }
 
@@ -91,15 +112,7 @@ inline bool operator<(fixed A, fixed B)
 
 inline bool operator<(fixed A, int Int)
 {
-	if (A.WholePart < Int)
-	{
-		return true;
-	}
-	else if (A.WholePart == Int)
-	{
-		return A.FractionalPart == 0;
-	}
-	return false;
+	return A.WholePart < Int;
 }
 
 inline fixed FMin(fixed A, fixed B)
@@ -122,6 +135,12 @@ struct v2
 {
 	fixed X;
 	fixed Y;
+
+	inline void operator+=(v2 Other)
+	{
+		X += Other.X;
+		Y += Other.Y;
+	}
 };
 
 inline v2 operator+(v2 A, v2 B)
@@ -138,4 +157,9 @@ inline v2 operator-(v2 A, v2 B)
 	Result.X = A.X - B.X;
 	Result.Y = A.Y - B.Y;
 	return Result;
+}
+
+inline fixed SqMagnitude(v2 V)
+{
+	return V.X * V.X + V.Y * V.Y;
 }

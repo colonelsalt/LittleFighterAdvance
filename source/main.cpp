@@ -14,25 +14,23 @@
 OBJ_ATTR g_ObjBuffer[128];
 OBJ_AFFINE *g_AffineObjBuffer = (OBJ_AFFINE*)g_ObjBuffer;
 
-static player LoadSprite(void)
+static OBJ_ATTR* LoadSprite(void)
 {
 	// Load tiles and palette of sprite into video and palete RAM
 	memcpy32(&tile_mem[4][0], freeze_0Tiles + 4 * 64 * 32, freeze_0TilesLen / 4);
 	memcpy32(pal_obj_mem, freeze_0Pal, freeze_0PalLen / 4);
 
 	oam_init(g_ObjBuffer, 128);
-	
-	player Player = {};
 
-	Player.Sprite = &g_ObjBuffer[0];
-	obj_set_attr(Player.Sprite,
+	OBJ_ATTR* Obj = &g_ObjBuffer[0];
+	obj_set_attr(Obj,
 	             ATTR0_SQUARE,  // Square, regular sprite
 	             ATTR1_SIZE_64, // 64x64 pixels,
 	             ATTR2_PALBANK(0) | 0); // palette index 0, tile index 0
 
 	oam_copy(oam_mem, g_ObjBuffer, 1); // Update first OAM object
 
-	return Player;
+	return Obj;
 }
 
 static void LoadBackground(void)
@@ -48,20 +46,77 @@ static void LoadBackground(void)
 }
 
 static b32 g_CanDraw;
+static entity Player;
+
 
 void OnVBlank()
 {
 	if (g_CanDraw)
 	{
 		g_CanDraw = false;
+
+		u32 CurrentFrame = Player.PlayingAnimation->Frames[Player.AnimationFrameIndex];
+		memcpy32(&tile_mem[4][0], freeze_0Tiles + CurrentFrame * 64 * 32, freeze_0TilesLen / 4);
 		oam_copy(oam_mem, g_ObjBuffer, 1);
 	}
 }
 
-static const bg_map ForestMap = { 
+static const bg_map ForestMap =
+{ 
 	500, 256,
 	0, 0
 };
+
+static const animation PlayerIdle =
+{
+	.Frames = (u32[]){0, 1, 2, 3},
+	.Length = 4,
+	.FrameDelay = 9,
+	.ShouldLoop = true
+};
+
+static const animation PlayerWalk =
+{
+	.Frames = (u32[]){4, 5, 6, 7},
+	.Length = 4,
+	.FrameDelay = 7,
+	.ShouldLoop = true
+};
+
+void SetAnimation(entity* Entity, const animation* Animation)
+{
+	if (Entity->PlayingAnimation != Animation)
+	{
+		Entity->PlayingAnimation = Animation;
+		Entity->AnimationTimer = Animation->FrameDelay;
+		Entity->AnimationFrameIndex = 0;
+	}
+}
+
+void AnimateEntity(entity* Entity)
+{
+	const animation* Animation = Entity->PlayingAnimation;
+	Entity->AnimationTimer--;
+	if (Entity->AnimationTimer <= 0)
+	{
+		Entity->AnimationTimer = Animation->FrameDelay;
+		if (Animation->ShouldLoop)
+		{
+			Entity->AnimationFrameIndex++;
+			if (Entity->AnimationFrameIndex >= Animation->Length)
+			{
+				Entity->AnimationFrameIndex = 0;
+			}
+		}
+		else
+		{
+			if (Entity->AnimationFrameIndex < Animation->Length - 1)
+			{
+				Entity->AnimationFrameIndex++;
+			}
+		}
+	}
+}
 
 int main(void)
 {
@@ -69,7 +124,8 @@ int main(void)
 	irq_enable(II_VBLANK);
 	irq_add(II_VBLANK, OnVBlank);
 
-	player Player = LoadSprite();
+	Player.Sprite = LoadSprite();
+
 	v2 PlayerStartPos = {};
 	PlayerStartPos.X = 0;
 	PlayerStartPos.Y = 90;
@@ -78,9 +134,10 @@ int main(void)
 	Player.WorldPos.X = Player.Width / 2;
 	Player.WorldPos.Y = 0;
 
+	SetAnimation(&Player, &PlayerIdle);
+
 	Player.Width = 64;
 	Player.Height = 64;
-
 
 	LoadBackground();
 
@@ -92,7 +149,11 @@ int main(void)
 	{
 		key_poll();
 
-		Player.WorldPos.X += key_tri_horz();
+		Player.Velocity.X = key_tri_horz() * WALK_SPEED;
+		Player.Velocity.Y = key_tri_vert() * WALK_SPEED;
+
+		Player.WorldPos += Player.Velocity;
+		
 		if (Player.WorldPos.X < 0)
 		{
 			Player.WorldPos.X = 0;
@@ -102,7 +163,6 @@ int main(void)
 			Player.WorldPos.X = ForestMap.Width;
 		}
 
-		Player.WorldPos.Y += key_tri_vert();
 		if (Player.WorldPos.Y > 104)
 		{
 			Player.WorldPos.Y = 104;
@@ -141,6 +201,25 @@ int main(void)
 		REG_BG0HOFS = CameraPos.X.WholePart;
 		REG_BG0VOFS = CameraPos.Y.WholePart;
 		
+		if (key_hit(KEY_LEFT))
+		{
+			SetHFlip(Player.Sprite, true);
+		}
+		else if (key_hit(KEY_RIGHT))
+		{
+			SetHFlip(Player.Sprite, false);	
+		}
+		if (SqMagnitude(Player.Velocity) > 0)
+		{
+			SetAnimation(&Player, &PlayerWalk);
+		}
+		else
+		{
+			SetAnimation(&Player, &PlayerIdle);
+		}
+
+
+		AnimateEntity(&Player);
 		SetObjPos(Player.Sprite, PlayerScreenPos);
 
 		g_CanDraw = true;
