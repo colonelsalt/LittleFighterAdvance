@@ -5,9 +5,10 @@ static const fixed RUN_SPEED = 3;
 static const fixed JUMP_SPEED = 7;
 static const fixed GRAVITY = F_HALF;
 
-static const u32 DOUBLE_TAP_INTERVAL = 20; // Max num. frames in between presses to count as a double-tap
+static const u32 DOUBLE_TAP_INTERVAL = 10; // Max num. frames in between presses to count as a double-tap
 static const u32 PLAYER_FRAME_SIZE = 8 * 8 * sizeof(TILE);
 static const u32 JUMP_DELAY = 7;
+static const u32 MAX_PUNCH_COMBO = 4;
 
 struct bg_map
 {

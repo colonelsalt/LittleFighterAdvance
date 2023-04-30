@@ -48,6 +48,46 @@ static const animation AnimJumpFastLoop =
 	.ShouldLoop = true
 };
 
+static const animation AnimStandardPunch1 =
+{
+	.Frames = (u32[]){10, 11},
+	.Length = 2,
+	.FrameDelay = 6,
+	.ShouldLoop = false
+};
+
+static const animation AnimStandardPunch2 =
+{
+	.Frames = (u32[]){12, 13},
+	.Length = 2,
+	.FrameDelay = 6,
+	.ShouldLoop = false
+};
+
+static const animation AnimStandardPunch3 =
+{
+	.Frames = (u32[]){17, 18, 19},
+	.Length = 3,
+	.FrameDelay = 8,
+	.ShouldLoop = false
+};
+
+static const animation AnimJumpAttack =
+{
+	.Frames = (u32[]){14, 15, 16},
+	.Length = 3,
+	.FrameDelay = 5,
+	.ShouldLoop = false
+};
+
+static const animation* PunchAnimations[MAX_PUNCH_COMBO] =
+{
+	&AnimStandardPunch1,
+	&AnimStandardPunch2,
+	&AnimStandardPunch1,
+	&AnimStandardPunch3
+};
+
 inline void SetAnimation(entity* Entity, const animation* Animation)
 {
 	if (Entity->PlayingAnimation != Animation)
@@ -63,7 +103,8 @@ inline b32 HasAnimationEnded(entity* Entity)
 	const animation* Animation = Entity->PlayingAnimation;
 	if (!Animation->ShouldLoop)
 	{
-		return Entity->AnimationFrameIndex >= Animation->Length - 1;
+		b32 result = Entity->AnimationFrameIndex >= Animation->Length - 1 && Entity->AnimationTimer <= 0;
+		return result;
 	}
 	return false;
 }
@@ -75,10 +116,10 @@ static void AnimateEntity(entity* Entity)
 	Entity->AnimationTimer--;
 	if (Entity->AnimationTimer <= 0)
 	{
-		Entity->AnimationTimer = Animation->FrameDelay;
 		if (Animation->ShouldLoop)
 		{
 			Entity->AnimationFrameIndex++;
+			Entity->AnimationTimer = Animation->FrameDelay;
 			if (Entity->AnimationFrameIndex >= Animation->Length)
 			{
 				Entity->AnimationFrameIndex = 0;
@@ -89,6 +130,7 @@ static void AnimateEntity(entity* Entity)
 			if (Entity->AnimationFrameIndex < Animation->Length - 1)
 			{
 				Entity->AnimationFrameIndex++;
+				Entity->AnimationTimer = Animation->FrameDelay;
 			}
 		}
 	}
@@ -97,7 +139,7 @@ static void AnimateEntity(entity* Entity)
 // Move entity in world & screen space based on its velocity & jump state
 static void MoveEntity(entity* Entity, const bg_map* Map, entity* Player)
 {
-	if (!Entity->StartedJump)
+	if (!(Entity->State & State_StartedJump))
 	{
 		Entity->WorldPos += Entity->Velocity;
 	}
@@ -120,17 +162,23 @@ static void MoveEntity(entity* Entity, const bg_map* Map, entity* Player)
 		Entity->WorldPos.Y = 0;
 	}
 
-	if (Entity->StartedJump)
+	if (Entity->Type == EEnemy)
+	{
+		v2 OffsetFromPlayer = Entity->WorldPos - Player->WorldPos;
+		Entity->ScreenPos = Player->GroundPosScreenSpace + OffsetFromPlayer;
+	}
+
+	if (Entity->State & State_StartedJump)
 	{
 		SetAnimation(Entity, &AnimStartJump);
 	}
-	else if (Entity->IsAirborne)
+	else if (Entity->State & State_Airborne)
 	{
-		if (Entity->Velocity.X <= -RUN_SPEED)
+		if (Entity->State & State_Attacking)
 		{
-			SetAnimation(Entity, &AnimJumpFastLoop);
+			SetAnimation(Entity, &AnimJumpAttack);
 		}
-		else if (Entity->Velocity.X >= RUN_SPEED)
+		else if (FAbs(Entity->Velocity.X) >= RUN_SPEED)
 		{
 			SetAnimation(Entity, &AnimJumpFastLoop);
 		}
@@ -141,24 +189,50 @@ static void MoveEntity(entity* Entity, const bg_map* Map, entity* Player)
 	}
 	else
 	{
-		if (Entity->IsRunning)
+		if (Entity->State & State_Running)
 		{
-			SetAnimation(Entity, &AnimRun);
+			if (Entity->State & State_Attacking)
+			{
+				SetAnimation(Entity, &AnimStandardPunch3);
+				if (HasAnimationEnded(Entity))
+				{
+					Entity->State &= ~(State_Running | State_Attacking);
+				}
+			}
+			else
+			{
+				SetAnimation(Entity, &AnimRun);
+			}
+
 		}
-		else if (SqMagnitude(Entity->Velocity) > 0)
+		else if (Entity->State & State_Attacking)
 		{
-			SetAnimation(Entity, &AnimWalk);
+			SetAnimation(Entity, PunchAnimations[Entity->ComboCount]);
+			if (HasAnimationEnded(Entity))
+			{
+				if (Entity->FramesSinceLastPunch > DOUBLE_TAP_INTERVAL ||
+					Entity->ComboCount >= MAX_PUNCH_COMBO - 1)
+				{
+					Entity->ComboCount = 0;
+					Entity->State &= ~State_Attacking;
+				}
+				else
+				{
+					Entity->ComboCount++;
+				}
+			}
 		}
 		else
 		{
-			SetAnimation(Entity, &AnimIdle);
+			if (SqMagnitude(Entity->Velocity) > 0)
+			{
+				SetAnimation(Entity, &AnimWalk);
+			}
+			else
+			{
+				SetAnimation(Entity, &AnimIdle);
+			}
 		}
-	}
-
-	if (Entity->Type == EEnemy)
-	{
-		v2 OffsetFromPlayer = Entity->WorldPos - Player->WorldPos;
-		Entity->ScreenPos = Player->GroundPosScreenSpace + OffsetFromPlayer;
 	}
 
 }

@@ -151,6 +151,16 @@ inline fixed FClamp(fixed Value, fixed Min, fixed Max)
 	return FMin(FMax(Value, Min), Max);
 }
 
+inline fixed FAbs(fixed Value)
+{
+	fixed Result = Value;
+	if (Result.WholePart < 0)
+	{
+		Result.WholePart *= -1;
+	}
+	return Result;
+}
+
 
 struct v2
 {
