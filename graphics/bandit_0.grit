@@ -1,0 +1,4 @@
+#
+# 
+#
+-ftc -gt -gB4 -gu8 -pe 16 -Mw 8 -Mh 8
