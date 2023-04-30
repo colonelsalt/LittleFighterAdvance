@@ -72,6 +72,14 @@ static const animation AnimStandardPunch3 =
 	.ShouldLoop = false
 };
 
+static const animation* PunchAnimations[MAX_PUNCH_COMBO] =
+{
+	&AnimStandardPunch1,
+	&AnimStandardPunch2,
+	&AnimStandardPunch1,
+	&AnimStandardPunch3
+};
+
 static const animation AnimJumpAttack =
 {
 	.Frames = (u32[]){14, 15, 16},
@@ -80,13 +88,26 @@ static const animation AnimJumpAttack =
 	.ShouldLoop = false
 };
 
-static const animation* PunchAnimations[MAX_PUNCH_COMBO] =
+static const animation AnimTakingDamage =
 {
-	&AnimStandardPunch1,
-	&AnimStandardPunch2,
-	&AnimStandardPunch1,
-	&AnimStandardPunch3
+	.Frames = (u32[]){48, 47, 46},
+	.Length = 3,
+	.FrameDelay = 15,
+	.ShouldLoop = false
 };
+
+static const animation AnimBloodSplatter =
+{
+	.Frames = (u32[]){0, 1, 2, 3, 4, 5},
+	.Length = 6,
+	.FrameDelay = 5,
+	.ShouldLoop = false
+};
+
+static constexpr u32 NUM_PARTICLES = 10;
+
+static entity* Humans[2];
+static entity Particles[NUM_PARTICLES];
 
 inline void SetAnimation(entity* Entity, const animation* Animation)
 {
@@ -136,12 +157,56 @@ static void AnimateEntity(entity* Entity)
 	}
 }
 
+static void SpawnParticle(v2 SpawnPos)
+{
+	for (u32 i = 0; i < ArrayCount(Particles); i++)
+	{
+		entity* Particle = &Particles[i];
+		if (!Particle->IsActive)
+		{
+			Particle->IsActive = true;
+			Particle->WorldPos = SpawnPos;
+			SetAnimation(Particle, &AnimBloodSplatter);
+			return;
+		}
+	}
+	Assert(false);
+}
+
+static void TakeDamage(entity* Entity, u32 Amount)
+{
+	Entity->Health -= Amount;
+	Entity->State |= State_TakingDamage;
+	Entity->FlinchTimer = 0;
+}
+
+static b32 IsEntityFacingLeft(entity* Entity)
+{
+	return Entity->Sprite.attr1 & ATTR1_HFLIP;
+}
+
+const u32 EPSILON = 50;
+
 // Move entity in world & screen space based on its velocity & jump state
 static void MoveEntity(entity* Entity, const bg_map* Map, entity* Player)
 {
-	if (!(Entity->State & State_StartedJump))
+	if (!Entity->IsActive)
+	{
+		return;
+	}
+
+	if (!(Entity->State & State_Immobile))
 	{
 		Entity->WorldPos += Entity->Velocity;
+	}
+
+	if (Entity->State & State_TakingDamage)
+	{
+		Entity->FlinchTimer++;
+		if (Entity->FlinchTimer >= FLINCH_DURATION)
+		{
+			Entity->State &= ~State_TakingDamage;
+		}
 	}
 		
 	if (Entity->WorldPos.X < 0)
@@ -162,13 +227,67 @@ static void MoveEntity(entity* Entity, const bg_map* Map, entity* Player)
 		Entity->WorldPos.Y = 0;
 	}
 
-	if (Entity->Type == EEnemy)
+	if (Entity->Type != EPlayer)
 	{
 		v2 OffsetFromPlayer = Entity->WorldPos - Player->WorldPos;
 		Entity->ScreenPos = Player->GroundPosScreenSpace + OffsetFromPlayer;
 	}
 
-	if (Entity->State & State_StartedJump)
+	if ((Entity->State & State_Attacking) && Entity->AnimationFrameIndex == Entity->PlayingAnimation->Length - 1)
+	{
+		for (u32 i = 0; i < ArrayCount(Humans); i++)
+		{
+			entity* Other = Humans[i];
+			if (Other->IsActive && (Other->Type == EPlayer || Other->Type == EEnemy) && Other != Entity)
+			{
+				v2 HandPos = Entity->WorldPos;
+				HandPos.Y += Entity->Height / 2;
+				if (!IsEntityFacingLeft(Entity))
+				{
+					HandPos.X += Entity->Width;
+				}
+				v2 OtherPos = Other->WorldPos;
+				OtherPos.X += Other->Width;
+				OtherPos.Y += Other->Height;
+
+				v2 ToOther = HandPos - OtherPos;
+				if (ToOther.X < 0)
+				{
+					SetHFlip(&Other->Sprite, true);
+				}
+				else
+				{
+					SetHFlip(&Other->Sprite, false);
+				}
+
+				fixed SqDist = SqMagnitude(ToOther);
+				if (SqDist < EPSILON * EPSILON)
+				{
+					TakeDamage(Other, Entity->State & State_Running ? 2 : 1);
+					SpawnParticle(HandPos);
+				}
+			}
+		}
+	}
+
+	//
+	// Animation update
+	//
+	if (Entity->Type == EParticle)
+	{
+		if (HasAnimationEnded(Entity))
+		{
+			Entity->IsActive = false;
+			Entity->PlayingAnimation = nullptr;
+		}
+		return;
+	}
+
+	if (Entity->State & State_TakingDamage)
+	{
+		SetAnimation(Entity, &AnimTakingDamage);
+	}
+	else if (Entity->State & State_StartedJump)
 	{
 		SetAnimation(Entity, &AnimStartJump);
 	}
@@ -210,7 +329,7 @@ static void MoveEntity(entity* Entity, const bg_map* Map, entity* Player)
 			SetAnimation(Entity, PunchAnimations[Entity->ComboCount]);
 			if (HasAnimationEnded(Entity))
 			{
-				if (Entity->FramesSinceLastPunch > DOUBLE_TAP_INTERVAL ||
+				if (Entity->FramesSinceLastPunch > COMBO_INTERVAL ||
 					Entity->ComboCount >= MAX_PUNCH_COMBO - 1)
 				{
 					Entity->ComboCount = 0;

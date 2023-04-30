@@ -59,7 +59,7 @@ inline fixed operator-(fixed A, fixed B)
 inline fixed operator*(fixed A, fixed B)
 {
 	fixed Result;
-	Result.RawValue = A.RawValue * B.RawValue;
+	Result.RawValue = (A.RawValue * B.RawValue) >> 8;
 	return Result;
 }
 

@@ -10,6 +10,7 @@
 #include "bandit_0.h"
 
 #include "forest_bg.h"
+#include "blood.h"
 
 #include "entity.cpp"
 #include "player.cpp"
@@ -17,19 +18,17 @@
 OBJ_ATTR g_ObjBuffer[128];
 OBJ_AFFINE *g_AffineObjBuffer = (OBJ_AFFINE*)g_ObjBuffer;
 
-static OBJ_ATTR* LoadSprite(const u16* Palette, u32 PaletteSize,
-                            u32 SpriteIndex, u32 PaletteIndex)
+static void LoadSprite(const u16* Palette, u32 PaletteSize,
+                       u32 SpriteIndex, u32 PaletteIndex,
+                       OBJ_ATTR* OutSprite)
 {
 	// Load palette
 	memcpy32(pal_obj_bank + PaletteIndex, Palette, PaletteSize / 4);
 
-	OBJ_ATTR* Obj = &g_ObjBuffer[SpriteIndex];
-	obj_set_attr(Obj,
+	obj_set_attr(OutSprite,
 	             ATTR0_SQUARE,  // Square, regular sprite
 	             ATTR1_SIZE_64, // 64x64 pixels,
 	             ATTR2_PALBANK(PaletteIndex) | SpriteIndex * 64);
-
-	return Obj;
 }
 
 static void LoadBackground(void)
@@ -54,12 +53,63 @@ void OnVBlank()
 	{
 		g_CanDraw = false;
 
+		u32 ObjIndex = 0;
+		
+		// Always draw particles in front of other sprites
+		for (u32 i = 0; i < ArrayCount(Particles); i++)
+		{
+			entity* Particle = &Particles[i];
+			if (Particle->IsActive)
+			{
+				u32 TileIndex = (2 * 64 + 16 * ObjIndex);
+				obj_unhide(&Particle->Sprite, ATTR0_REG);
+				Particle->Sprite.attr1 = ATTR1_SIZE_32;
+				Particle->Sprite.attr2 = ATTR2_PALBANK(2) | TileIndex;
+				SetObjPos(&Particle->Sprite, Particle->ScreenPos);
+
+				g_ObjBuffer[ObjIndex++] = Particle->Sprite;
+			}
+		}
+
+		// If Player is in front of enemy (higher Y), set it as the first OBJ, so it's drawn last
+		if (Player.WorldPos.Y > Enemy.WorldPos.Y)
+		{
+			g_ObjBuffer[ObjIndex++] = Player.Sprite;
+			g_ObjBuffer[ObjIndex++] = Enemy.Sprite;
+		}
+		else
+		{
+			// Otherwise, set enemy as first OBJ
+			g_ObjBuffer[ObjIndex++] = Enemy.Sprite;
+			g_ObjBuffer[ObjIndex++] = Player.Sprite;
+		}
+
+		u32 TileOffset = 0;
+
 		u32 PlayerFrame = Player.PlayingAnimation->Frames[Player.AnimationFrameIndex];
-		memcpy32(&tile_mem[4][0], Player.Tiles + PlayerFrame * 64 * 32, PLAYER_FRAME_SIZE / 4);
+		memcpy32(&tile_mem[4][TileOffset], Player.Tiles + PlayerFrame * PLAYER_FRAME_SIZE, PLAYER_FRAME_SIZE / 4);
+		TileOffset += 64;
 
 		u32 EnemyFrame = Enemy.PlayingAnimation->Frames[Enemy.AnimationFrameIndex];
-		memcpy32(&tile_mem[4][64], Enemy.Tiles + EnemyFrame * 64 * 32, PLAYER_FRAME_SIZE / 4);
-		oam_copy(oam_mem, g_ObjBuffer, 2);
+		memcpy32(&tile_mem[4][TileOffset], Enemy.Tiles + EnemyFrame * PLAYER_FRAME_SIZE, PLAYER_FRAME_SIZE / 4);
+		TileOffset += 64;
+
+		for (u32 i = 0; i < ArrayCount(Particles); i++)
+		{
+			entity* Particle = &Particles[i];
+			if (Particle->IsActive)
+			{
+				u32 ParticleFrame = Particle->PlayingAnimation->Frames[Particle->AnimationFrameIndex];
+				memcpy32(&tile_mem[4][TileOffset], bloodTiles + PARTICLE_FRAME_SIZE * ParticleFrame, PARTICLE_FRAME_SIZE / 4);
+				TileOffset += 16;
+			}
+		}
+
+		for (u32 i = ObjIndex; i < ObjIndex + 10; i++)
+		{
+			obj_hide(&g_ObjBuffer[i]);
+		}
+		oam_copy(oam_mem, g_ObjBuffer, ObjIndex + 10);
 	}
 }
 
@@ -77,13 +127,15 @@ int main(void)
 
 	oam_init(g_ObjBuffer, 128);
 
-	Player.Sprite = LoadSprite(freeze_0Pal, freeze_0PalLen, 0, 0);
+	LoadSprite(freeze_0Pal, freeze_0PalLen, 0, 0, &Player.Sprite);
 	Player.Tiles = freeze_0Tiles;
 	Player.Type = EPlayer;
+	Player.IsActive = true;
 
-	Enemy.Sprite = LoadSprite(bandit_0Pal, bandit_0PalLen, 1, 1);
+	LoadSprite(bandit_0Pal, bandit_0PalLen, 1, 1, &Enemy.Sprite);
 	Enemy.Tiles = bandit_0Tiles;
 	Enemy.Type = EEnemy;
+	Enemy.IsActive = true;
 
 	Enemy.WorldPos.X = 300;
 	Enemy.WorldPos.Y = 50;
@@ -95,6 +147,15 @@ int main(void)
 	Player.WorldPos = {};
 	Player.WorldPos.X = Player.Width / 2;
 	Player.WorldPos.Y = 0;
+
+	for (u32 i = 0; i < ArrayCount(Particles); i++)
+	{
+		Particles[i].Type = EParticle;
+		LoadSprite(bloodPal, bloodPalLen, 0, 2, &Particles[i].Sprite);
+	}
+
+	Humans[0] = &Player;
+	Humans[1] = &Enemy;
 
 	SetAnimation(&Player, &AnimIdle);
 	SetAnimation(&Enemy, &AnimIdle);
@@ -115,6 +176,11 @@ int main(void)
 		HandlePlayerInput(&Player);
 		MoveEntity(&Player, &ForestMap, &Player);
 		MoveEntity(&Enemy, &ForestMap, &Player);
+		for (u32 i = 0; i < ArrayCount(Particles); i++)
+		{
+			MoveEntity(&Particles[i], &ForestMap, &Player);
+		}
+
 
 		v2 Cutoff = {};
 		Cutoff.X = ForestMap.Width - SCREEN_WIDTH;
@@ -146,12 +212,20 @@ int main(void)
 		REG_BG0HOFS = CameraPos.X.WholePart;
 		REG_BG0VOFS = CameraPos.Y.WholePart;
 
-
 		AnimateEntity(&Player);
 		AnimateEntity(&Enemy);
+		for (u32 i = 0; i < ArrayCount(Particles); i++)
+		{
+			entity* Particle = &Particles[i];
+			if (Particle->IsActive)
+			{
+				AnimateEntity(Particle);
+				SetObjPos(&Particle->Sprite, Particle->ScreenPos);
+			}
+		}
 
-		SetObjPos(Player.Sprite, Player.ScreenPos);
-		SetObjPos(Enemy.Sprite, Enemy.ScreenPos);
+		SetObjPos(&Player.Sprite, Player.ScreenPos);
+		SetObjPos(&Enemy.Sprite, Enemy.ScreenPos);
 
 		g_CanDraw = true;
 		VBlankIntrWait();

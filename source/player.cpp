@@ -42,7 +42,7 @@ static void HandlePlayerInput(entity* Player)
 
 	if (key_hit(KEY_LEFT))
 	{
-		SetHFlip(Player->Sprite, true);
+		SetHFlip(&Player->Sprite, true);
 
 		if (Player->LastInputX < 0 && Player->FramesSinceLastMovement <= DOUBLE_TAP_INTERVAL)
 		{
@@ -62,7 +62,7 @@ static void HandlePlayerInput(entity* Player)
 	}
 	else if (key_hit(KEY_RIGHT))
 	{
-		SetHFlip(Player->Sprite, false);	
+		SetHFlip(&Player->Sprite, false);	
 
 		if (Player->LastInputX > 0 && Player->FramesSinceLastMovement <= DOUBLE_TAP_INTERVAL)
 		{

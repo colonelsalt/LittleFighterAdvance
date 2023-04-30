@@ -1,6 +1,8 @@
 #pragma once
 
-#define Assert(X) { if (!(X)) *(int*)0; }
+#define Assert(X) { if (!(X)) int Y = *((int*)0); }
+
+#define ArrayCount(X) (sizeof(X) / sizeof((X)[0]))
 
 inline void SetObjPos(OBJ_ATTR* Obj, v2 ScreenPos)
 {
