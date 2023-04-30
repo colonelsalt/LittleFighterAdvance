@@ -104,6 +104,14 @@ static const animation AnimBloodSplatter =
 	.ShouldLoop = false
 };
 
+static const animation AnimKnockout =
+{
+	.Frames = (u32[]){30, 31, 32, 33, 34, 35, 34},
+	.Length = 7,
+	.FrameDelay = 8,
+	.ShouldLoop = false
+};
+
 static constexpr u32 NUM_PARTICLES = 10;
 
 static entity* Humans[2];
@@ -176,8 +184,15 @@ static void SpawnParticle(v2 SpawnPos)
 static void TakeDamage(entity* Entity, u32 Amount)
 {
 	Entity->Health -= Amount;
-	Entity->State |= State_TakingDamage;
-	Entity->FlinchTimer = 0;
+	if (Amount > 1)
+	{
+		Entity->State |= State_KnockedOut;
+	}
+	else
+	{
+		Entity->State |= State_TakingDamage;
+		Entity->FlinchTimer = 0;
+	}
 }
 
 static b32 IsEntityFacingLeft(entity* Entity)
@@ -238,7 +253,8 @@ static void MoveEntity(entity* Entity, const bg_map* Map, entity* Player)
 		for (u32 i = 0; i < ArrayCount(Humans); i++)
 		{
 			entity* Other = Humans[i];
-			if (Other->IsActive && (Other->Type == EPlayer || Other->Type == EEnemy) && Other != Entity)
+			if (Other->IsActive && (Other->Type == EPlayer || Other->Type == EEnemy) && Other != Entity &&
+			    !(Other->State & State_KnockedOut))
 			{
 				v2 HandPos = Entity->WorldPos;
 				HandPos.Y += Entity->Height / 2;
@@ -263,7 +279,13 @@ static void MoveEntity(entity* Entity, const bg_map* Map, entity* Player)
 				fixed SqDist = SqMagnitude(ToOther);
 				if (SqDist < EPSILON * EPSILON)
 				{
-					TakeDamage(Other, Entity->State & State_Running ? 2 : 1);
+					u32 Damage = 1;
+					if ((Entity->State & State_Running) || Entity->ComboCount >= MAX_PUNCH_COMBO - 1)
+					{
+						Damage = 2;
+					}
+
+					TakeDamage(Other, Damage);
 					SpawnParticle(HandPos);
 				}
 			}
@@ -280,6 +302,12 @@ static void MoveEntity(entity* Entity, const bg_map* Map, entity* Player)
 			Entity->IsActive = false;
 			Entity->PlayingAnimation = nullptr;
 		}
+		return;
+	}
+
+	if (Entity->State & State_KnockedOut)
+	{
+		SetAnimation(Entity, &AnimKnockout);
 		return;
 	}
 

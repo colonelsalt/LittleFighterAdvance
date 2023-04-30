@@ -227,6 +227,12 @@ int main(void)
 		SetObjPos(&Player.Sprite, Player.ScreenPos);
 		SetObjPos(&Enemy.Sprite, Enemy.ScreenPos);
 
+		if (key_hit(KEY_START))
+		{
+			Enemy.IsActive = true;
+			Enemy.State = State_Idle;
+		}
+
 		g_CanDraw = true;
 		VBlankIntrWait();
 	}
